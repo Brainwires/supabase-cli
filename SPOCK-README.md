@@ -49,6 +49,61 @@ SELECT spock.replicate_ddl(
 
 The CLI also automatically adds new tables to the replication set.
 
+## Spock Management Commands
+
+### `supabase spock status`
+
+Show detailed Spock replication status including nodes, subscriptions, tables, and replication slots.
+
+```bash
+supabase spock status --db-url "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
+```
+
+**Output includes:**
+- Spock extension version
+- Local node information
+- Replication sets
+- Active subscriptions and their status
+- Replicated tables (with counts)
+- Replication slots and LSN positions
+- Conflict statistics
+
+### `supabase spock enable`
+
+Enable Spock replication on a database. Creates the extension, local node, and replication sets.
+
+```bash
+# Enable on primary node (odd IDs: 1, 3, 5...)
+supabase spock enable \
+  --node-name primary \
+  --node-offset 1 \
+  --db-url "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
+
+# Enable on standby node (even IDs: 2, 4, 6...)
+supabase spock enable \
+  --node-name standby \
+  --node-offset 2 \
+  --db-url "postgresql://postgres:password@standby:5432/postgres?sslmode=disable"
+```
+
+**Options:**
+- `--node-name` - Name for this Spock node (default: "primary")
+- `--node-offset` - Sequence offset: 1 for primary (odd IDs), 2 for standby (even IDs)
+- `--replication-sets` - Replication sets to create (default: default,ddl_sql)
+
+### `supabase spock disable`
+
+Disable Spock replication on a database. Removes subscriptions, replication sets, and the extension.
+
+```bash
+supabase spock disable --db-url "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
+
+# Force disable without confirmation (drops active subscriptions)
+supabase spock disable --force --db-url "postgresql://..."
+```
+
+**Warning:** This will stop all replication and remove configuration.
+
 ## Commands with Spock Support
 
 ### `supabase db exec`
