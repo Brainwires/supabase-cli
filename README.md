@@ -173,31 +173,39 @@ This is a **Brainwires fork** of the Supabase CLI with added support for **Spock
 
 ### Features Added
 
+- **Automatic Spock Detection** - Detects Spock from database connection (no config needed)
 - **Automatic DDL Replication** - Wraps CREATE/ALTER/DROP statements with `spock.replicate_ddl()`
-- **Sequence Configuration** - Auto-detects SERIAL/BIGSERIAL columns and configures INCREMENT BY 2 for conflict-free bi-directional inserts
-- **Auto Table Registration** - Automatically adds new tables to replication sets on both nodes
-- **Async DDL Wait** - Polls for DDL replication completion with configurable timeouts
+- **Auto Table Registration** - Automatically adds new tables to replication sets
+- **New `db exec` Command** - Execute arbitrary SQL with Spock support
+- **`--spock-remote-dsn` Flag** - Specify remote node for replication verification
 
-### Configuration
+### Quick Start
 
-Enable Spock in your `config.toml`:
+```bash
+# Execute DDL with Spock replication
+supabase db exec \
+  --sql "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)" \
+  --db-url "postgresql://postgres:pass@primary:5432/postgres?sslmode=disable" \
+  --spock-remote-dsn "postgresql://postgres:pass@standby:5432/postgres?sslmode=disable"
 
-```toml
-[db.spock]
-enabled = true
-remote_dsn = "postgresql://user:pass@remote:5432/db"
-replication_sets = ["default", "ddl_sql"]
-default_repset = "default"
-auto_add_tables = true
-node_offset = 1  # 1=primary (odd IDs), 2=standby (even IDs)
+# Apply migrations with Spock replication
+supabase migration up \
+  --db-url "postgresql://postgres:pass@primary:5432/postgres?sslmode=disable" \
+  --spock-remote-dsn "postgresql://postgres:pass@standby:5432/postgres?sslmode=disable"
 ```
 
 ### Documentation
 
-See [supabase-postgres-spock](https://github.com/Brainwires/supabase-postgres-spock) for complete Spock documentation:
-- Production readiness tests and monitoring queries
-- Deployment steps and configuration guide
-- System setup and troubleshooting
+**See [SPOCK-README.md](./SPOCK-README.md) for complete documentation:**
+- Supported commands and flags
+- DDL statement classification
+- Sequence configuration for bi-directional replication
+- Troubleshooting guide
+
+**See [supabase-postgres-spock](https://github.com/Brainwires/supabase-postgres-spock) for Spock PostgreSQL setup:**
+- Docker image with Spock extension
+- Production deployment guide
+- Monitoring and troubleshooting
 
 ## Developing
 
