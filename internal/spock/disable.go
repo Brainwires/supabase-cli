@@ -47,23 +47,9 @@ func RunDisable(ctx context.Context, force bool, config pgconn.Config, options .
 		}
 	}
 
-	if activeSubscriptions > 0 && !force {
-		fmt.Fprintln(os.Stderr, utils.Red("Cannot disable Spock: there are active subscriptions."))
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Active subscriptions:")
-		for _, sub := range status.Subscriptions {
-			if sub.Enabled {
-				fmt.Fprintf(os.Stderr, "  - %s\n", sub.SubName)
-			}
-		}
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Use --force to disable anyway (will drop all subscriptions).")
-		return errors.New("active subscriptions exist")
-	}
-
-	// Confirm with user
+	// Confirm with user (unless --force)
 	if !force {
-		msg := "Are you sure you want to disable Spock replication? This will remove all replication configuration."
+		msg := buildDisableConfirmation(status, activeSubscriptions)
 		if shouldDisable, err := utils.NewConsole().PromptYesNo(ctx, msg, false); err != nil {
 			return err
 		} else if !shouldDisable {
@@ -143,4 +129,47 @@ func RunDisable(ctx context.Context, force bool, config pgconn.Config, options .
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Note: Sequences may still have INCREMENT BY 2. Reset manually if needed.")
 	return nil
+}
+
+func buildDisableConfirmation(status *SpockStatus, activeSubscriptions int) string {
+	msg := fmt.Sprintln("Do you want to disable Spock replication?")
+	msg += fmt.Sprintln()
+	msg += fmt.Sprintln("This will remove:")
+
+	if status.LocalNode != nil {
+		msg += fmt.Sprintf(" • Local node: %s\n", utils.Bold(status.LocalNode.NodeName))
+	}
+
+	if len(status.Subscriptions) > 0 {
+		msg += fmt.Sprintf(" • %d subscription(s):\n", len(status.Subscriptions))
+		for _, sub := range status.Subscriptions {
+			statusIndicator := ""
+			if sub.Status == "replicating" {
+				statusIndicator = utils.Green(" [active]")
+			}
+			msg += fmt.Sprintf("   - %s%s\n", utils.Bold(sub.SubName), statusIndicator)
+		}
+	}
+
+	if len(status.ReplicationSets) > 0 {
+		msg += fmt.Sprintf(" • %d replication set(s)\n", len(status.ReplicationSets))
+	}
+
+	if len(status.Tables) > 0 {
+		msg += fmt.Sprintf(" • %d table(s) from replication\n", len(status.Tables))
+	}
+
+	if len(status.Slots) > 0 {
+		msg += fmt.Sprintf(" • %d replication slot(s)\n", len(status.Slots))
+	}
+
+	msg += fmt.Sprintln()
+
+	if activeSubscriptions > 0 {
+		msg += fmt.Sprintf("%s Active subscriptions will be terminated. Remote nodes may lose sync.\n", utils.Red("WARNING:"))
+	}
+
+	msg += fmt.Sprintf("%s This action cannot be undone. All replication configuration will be lost.", utils.Yellow("WARNING:"))
+
+	return msg
 }
