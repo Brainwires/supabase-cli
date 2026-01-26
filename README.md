@@ -207,6 +207,261 @@ supabase migration up \
 - Production deployment guide
 - Monitoring and troubleshooting
 
+## Self-Hosted Management Commands
+
+This fork includes powerful CLI commands for managing self-hosted Supabase instances deployed via Docker Compose.
+
+### Prerequisites
+
+All self-hosted commands require the `--folder` flag pointing to your Docker Compose directory containing the `.env` file.
+
+### Commands Overview
+
+| Command | Description |
+|---------|-------------|
+| `supabase backup` | Create database and storage backups (supports full backups with roles/settings) |
+| `supabase restore` | Restore from backup files (auto-detects full backups) |
+| `supabase health` | Monitor service health status |
+| `supabase logs` | View and follow service logs |
+| `supabase passwd` | Change database and dashboard passwords |
+| `supabase roll` | Regenerate API keys (JWT, anon, service role) |
+
+---
+
+### `supabase backup`
+
+Create backups of your database and/or storage buckets.
+
+**Backup Types:**
+- **Standard** (default): Schema and data only using pg_dump. Fast and suitable for data migration between existing instances.
+- **Full** (`--full`): Complete disaster recovery backup including roles, permissions, settings, extensions, and data. Use this for restoring to a fresh database.
+
+```bash
+# Standard database backup (schema + data)
+supabase backup --folder ~/supabase/docker --db
+
+# Full database backup (roles, settings, extensions, schema, data)
+supabase backup --folder ~/supabase/docker --db --full
+
+# Full backup with compression
+supabase backup --folder ~/supabase/docker --db --full --compress
+
+# Backup storage buckets
+supabase backup --folder ~/supabase/docker --storage
+
+# Complete backup (database + storage)
+supabase backup --folder ~/supabase/docker --db --storage --full --compress
+
+# Backup to specific output file
+supabase backup --folder ~/supabase/docker --db --output /backups/mybackup.dump
+
+# Schema only (no data)
+supabase backup --folder ~/supabase/docker --db --schema-only
+
+# Data only (no schema)
+supabase backup --folder ~/supabase/docker --db --data-only
+```
+
+**Full Backup Contents:**
+When using `--full`, the backup creates a tar archive containing:
+- `roles.sql` - All database roles and permissions
+- `settings.sql` - Database configuration settings
+- `extensions.sql` - Installed extensions list
+- `database.dump` - Complete schema and data (pg_dump custom format)
+- `MANIFEST.txt` - Backup metadata and restore instructions
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--db` - Backup PostgreSQL database using pg_dump
+- `--storage` - Backup storage buckets as tar archive
+- `--output, -o` - Output file path
+- `--compress` - Compress output with gzip
+- `--full` - Full backup including roles, settings, and extensions
+- `--data-only` - Only backup data, no schema
+- `--schema-only` - Only backup schema, no data
+
+---
+
+### `supabase restore`
+
+Restore database and/or storage from backup files. Compressed backups (.gz) and full backups (tar with MANIFEST.txt) are automatically detected.
+
+```bash
+# Restore standard database backup
+supabase restore --folder ~/supabase/docker --db /backups/backup.dump
+
+# Restore full backup (auto-detected, restores roles first)
+supabase restore --folder ~/supabase/docker --db /backups/full-backup.tar
+
+# Restore compressed backup
+supabase restore --folder ~/supabase/docker --db /backups/backup.dump.gz
+
+# Restore storage buckets
+supabase restore --folder ~/supabase/docker --storage /backups/storage.tar.gz
+
+# Restore with clean (drop existing objects first)
+supabase restore --folder ~/supabase/docker --db /backups/backup.dump --clean
+
+# Skip confirmation prompt
+supabase restore --folder ~/supabase/docker --db /backups/backup.dump --yes
+```
+
+**Full Backup Restore:**
+When restoring a full backup (created with `--full`), the restore process automatically:
+1. Detects the full backup format (tar archive with MANIFEST.txt)
+2. Restores roles and permissions first (skipping existing roles)
+3. Restores the database schema and data
+4. Applies database settings
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--db` - Database backup file to restore
+- `--storage` - Storage backup file to restore
+- `--clean` - Drop existing objects before restore
+- `--yes, -y` - Skip confirmation prompt
+
+---
+
+### `supabase health`
+
+Display health status of all services in your self-hosted instance.
+
+```bash
+# Check health of all services
+supabase health --folder ~/supabase/docker
+
+# Output as JSON
+supabase health --folder ~/supabase/docker --json
+
+# Continuously monitor (refresh every 5 seconds)
+supabase health --folder ~/supabase/docker --watch 5
+```
+
+**Example Output:**
+```
+╭───────────┬─────────┬─────────┬────────┬─────────────────────╮
+│ SERVICE   │ STATUS  │ HEALTH  │ UPTIME │ IMAGE               │
+├───────────┼─────────┼─────────┼────────┼─────────────────────┤
+│ db        │ running │ healthy │ 2h 15m │ 15.8.1.060          │
+│ auth      │ running │ healthy │ 2h 15m │ v2.184.0            │
+│ kong      │ running │ healthy │ 2h 15m │ 2.8.1               │
+│ rest      │ running │ healthy │ 2h 15m │ v12.2.8             │
+│ realtime  │ running │ healthy │ 2h 15m │ v2.33.70            │
+│ storage   │ running │ healthy │ 2h 15m │ v1.22.12            │
+│ studio    │ running │ healthy │ 2h 15m │ 20250113-41c4d0f    │
+╰───────────┴─────────┴─────────┴────────┴─────────────────────╯
+
+Summary: 7 healthy, 0 unhealthy, 0 stopped
+```
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--json` - Output as JSON
+- `--watch, -w` - Continuously monitor (refresh every N seconds)
+
+---
+
+### `supabase logs`
+
+View and follow logs from self-hosted services.
+
+```bash
+# View logs from database service
+supabase logs --folder ~/supabase/docker -s db
+
+# View logs from multiple services
+supabase logs --folder ~/supabase/docker -s auth -s kong
+
+# Follow logs (like tail -f)
+supabase logs --folder ~/supabase/docker -s db -f
+
+# Show logs from the last 10 minutes
+supabase logs --folder ~/supabase/docker -s auth --since 10m
+
+# Show logs from a specific date
+supabase logs --folder ~/supabase/docker -s db --since 2024-01-01
+
+# Show last 50 lines
+supabase logs --folder ~/supabase/docker -s db -n 50
+
+# View all service logs
+supabase logs --folder ~/supabase/docker
+```
+
+**Valid Services:** `db`, `kong`, `auth`, `rest`, `realtime`, `storage`, `imgproxy`, `meta`, `functions`, `analytics`, `studio`, `vector`, `pooler`
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--service, -s` - Filter by service (can be specified multiple times)
+- `--follow, -f` - Follow logs (tail -f style)
+- `--since` - Show logs since (e.g., '10m', '1h', '2024-01-01')
+- `--tail, -n` - Number of lines to show (default 100)
+
+---
+
+### `supabase passwd`
+
+Change passwords for database and/or studio dashboard.
+
+```bash
+# Change database password (interactive prompt)
+supabase passwd --folder ~/supabase/docker --db
+
+# Change specific database user password
+supabase passwd --folder ~/supabase/docker --db --user authenticator
+
+# Auto-generate a new studio password
+supabase passwd --folder ~/supabase/docker --studio --generate
+
+# Change both database and studio passwords
+supabase passwd --folder ~/supabase/docker --db --studio --generate
+
+# Non-interactive mode with automatic restart
+supabase passwd --folder ~/supabase/docker --studio --generate --restart
+```
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--db` - Change database password (POSTGRES_PASSWORD)
+- `--studio` - Change studio dashboard password (DASHBOARD_PASSWORD)
+- `--user` - Database user to change password for (default: postgres)
+- `--generate` - Auto-generate a secure password
+- `--password` - New password (not recommended, use prompt instead)
+- `--restart` - Non-interactive mode: skip prompts and restart containers
+
+---
+
+### `supabase roll`
+
+Regenerate API keys (JWT secret, anon key, service role key) for your self-hosted instance.
+
+```bash
+# Regenerate all keys
+supabase roll --folder ~/supabase/docker --all
+
+# Regenerate only JWT secret
+supabase roll --folder ~/supabase/docker --jwt
+
+# Regenerate only anon key
+supabase roll --folder ~/supabase/docker --anon
+
+# Regenerate only service role key
+supabase roll --folder ~/supabase/docker --service-role
+
+# Non-interactive mode with automatic restart
+supabase roll --folder ~/supabase/docker --all --restart
+```
+
+**Flags:**
+- `--folder` (required) - Path to docker folder containing .env
+- `--all` - Regenerate all keys (JWT, anon, service role)
+- `--jwt` - Regenerate JWT secret
+- `--anon` - Regenerate anon key
+- `--service-role` - Regenerate service role key
+- `--restart` - Non-interactive mode: skip prompts and restart containers
+
+---
+
 ## Developing
 
 To run from source:
