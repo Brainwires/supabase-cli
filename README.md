@@ -194,8 +194,10 @@ node_offset = 1  # 1=primary (odd IDs), 2=standby (even IDs)
 
 ### Documentation
 
-- [SPOCK_SCORECARD.md](./SPOCK_SCORECARD.md) - Production readiness tests and monitoring queries
-- [SPOCK_DEPLOYMENT_LOG.md](./SPOCK_DEPLOYMENT_LOG.md) - Deployment steps and configuration guide
+See [supabase-postgres-spock](https://github.com/Brainwires/supabase-postgres-spock) for complete Spock documentation:
+- Production readiness tests and monitoring queries
+- Deployment steps and configuration guide
+- System setup and troubleshooting
 
 ## Developing
 
