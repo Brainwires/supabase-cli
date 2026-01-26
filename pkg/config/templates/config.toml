@@ -74,6 +74,27 @@ allowed_cidrs = ["0.0.0.0/0"]
 # Defaults to allow all IPv6 connections. Set empty array to block all IPs.
 allowed_cidrs_v6 = ["::/0"]
 
+# Spock bi-directional replication configuration
+[db.spock]
+# Enable Spock replication mode for migrations
+enabled = false
+# Connection string for the remote Spock node
+# remote_dsn = "env(SPOCK_REMOTE_DSN)"
+# Replication sets to use for DDL replication
+replication_sets = ["default", "ddl_sql"]
+# Default replication set for adding new tables
+default_repset = "default"
+# Automatically add new tables to replication sets on both nodes
+auto_add_tables = true
+# Node offset for sequence IDs (1=primary/odd, 2=standby/even)
+node_offset = 1
+# Maximum attempts when waiting for remote replication (default: 30)
+max_wait_attempts = 30
+# Base delay in milliseconds for exponential backoff (default: 100)
+base_wait_delay_ms = 100
+# Enable verbose logging for debugging
+verbose = false
+
 [realtime]
 enabled = true
 # Bind realtime via either IPv4 or IPv6. (default: IPv4)

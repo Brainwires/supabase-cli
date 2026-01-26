@@ -167,6 +167,36 @@ We follow semantic versioning for changes that directly impact CLI commands, fla
 
 However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
 
+## Brainwires Fork - Spock Bi-Directional Replication
+
+This is a **Brainwires fork** of the Supabase CLI with added support for **Spock bi-directional PostgreSQL replication**.
+
+### Features Added
+
+- **Automatic DDL Replication** - Wraps CREATE/ALTER/DROP statements with `spock.replicate_ddl()`
+- **Sequence Configuration** - Auto-detects SERIAL/BIGSERIAL columns and configures INCREMENT BY 2 for conflict-free bi-directional inserts
+- **Auto Table Registration** - Automatically adds new tables to replication sets on both nodes
+- **Async DDL Wait** - Polls for DDL replication completion with configurable timeouts
+
+### Configuration
+
+Enable Spock in your `config.toml`:
+
+```toml
+[db.spock]
+enabled = true
+remote_dsn = "postgresql://user:pass@remote:5432/db"
+replication_sets = ["default", "ddl_sql"]
+default_repset = "default"
+auto_add_tables = true
+node_offset = 1  # 1=primary (odd IDs), 2=standby (even IDs)
+```
+
+### Documentation
+
+- [SPOCK_SCORECARD.md](./SPOCK_SCORECARD.md) - Production readiness tests and monitoring queries
+- [SPOCK_DEPLOYMENT_LOG.md](./SPOCK_DEPLOYMENT_LOG.md) - Deployment steps and configuration guide
+
 ## Developing
 
 To run from source:

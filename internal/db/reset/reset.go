@@ -108,7 +108,8 @@ func resetDatabase14(ctx context.Context, version string, fsys afero.Fs, options
 		return err
 	}
 	defer conn.Close(context.Background())
-	return apply.MigrateAndSeed(ctx, version, conn, fsys)
+	// Local operation - no Spock needed
+	return apply.MigrateAndSeed(ctx, version, conn, fsys, nil)
 }
 
 func resetDatabase15(ctx context.Context, version string, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
@@ -251,7 +252,23 @@ func resetRemote(ctx context.Context, version string, config pgconn.Config, fsys
 		return err
 	}
 	defer conn.Close(context.Background())
-	return down.ResetAll(ctx, version, conn, fsys)
+
+	// Connect to Spock remote if enabled
+	var remoteConn *pgx.Conn
+	if utils.Config.Db.Spock.Enabled {
+		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
+		if remoteDSN == "" {
+			return errors.New("Spock enabled but remote_dsn not configured")
+		}
+		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
+		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		if err != nil {
+			return errors.Errorf("failed to connect to remote Spock node: %w", err)
+		}
+		defer remoteConn.Close(context.Background())
+	}
+
+	return down.ResetAll(ctx, version, conn, fsys, remoteConn)
 }
 
 func LikeEscapeSchema(schemas []string) (result []string) {

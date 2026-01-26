@@ -34,7 +34,7 @@ func TestMigrateDatabase(t *testing.T) {
 			Query(migration.INSERT_MIGRATION_VERSION, "0", "test", []string{sql}).
 			Reply("INSERT 0 1")
 		// Run test
-		err := MigrateAndSeed(context.Background(), "", conn.MockClient(t), fsys)
+		err := MigrateAndSeed(context.Background(), "", conn.MockClient(t), fsys, nil)
 		// Check error
 		assert.NoError(t, err)
 	})
@@ -60,20 +60,20 @@ func TestMigrateDatabase(t *testing.T) {
 			Reply("INSERT 0 1")
 		utils.Config.Db.Seed.Enabled = false
 		// Run test
-		err := MigrateAndSeed(context.Background(), "", conn.MockClient(t), fsys)
+		err := MigrateAndSeed(context.Background(), "", conn.MockClient(t), fsys, nil)
 		// No error should be returned since seeding is skipped
 		assert.NoError(t, err)
 	})
 
 	t.Run("ignores empty local directory", func(t *testing.T) {
-		assert.NoError(t, MigrateAndSeed(context.Background(), "", nil, afero.NewMemMapFs()))
+		assert.NoError(t, MigrateAndSeed(context.Background(), "", nil, afero.NewMemMapFs(), nil))
 	})
 
 	t.Run("throws error on open failure", func(t *testing.T) {
 		// Setup in-memory fs
 		fsys := &fstest.OpenErrorFs{DenyPath: utils.MigrationsDir}
 		// Run test
-		err := MigrateAndSeed(context.Background(), "", nil, fsys)
+		err := MigrateAndSeed(context.Background(), "", nil, fsys, nil)
 		// Check error
 		assert.ErrorIs(t, err, os.ErrPermission)
 	})

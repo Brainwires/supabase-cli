@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/spf13/viper"
 	"github.com/supabase/cli/pkg/parser"
+	"github.com/supabase/cli/pkg/spock"
 )
 
 type MigrationFile struct {
@@ -100,6 +101,33 @@ func (m *MigrationFile) ExecBatch(ctx context.Context, conn *pgx.Conn) error {
 		msg = append(msg, fmt.Sprintf("At statement: %d", i), stat)
 		return errors.Errorf("%w\n%s", err, strings.Join(msg, "\n"))
 	}
+	return nil
+}
+
+// ExecBatchWithSpock executes migration statements with Spock replication support
+func (m *MigrationFile) ExecBatchWithSpock(ctx context.Context, primary *pgx.Conn, remote *pgx.Conn, spockCfg spock.Config) error {
+	executor := spock.NewExecutor(primary, remote, spockCfg)
+
+	transformed, err := executor.TransformStatements(m.Statements)
+	if err != nil {
+		return errors.Errorf("failed to transform statements: %w", err)
+	}
+
+	if err := executor.ExecuteWithReplication(ctx, transformed); err != nil {
+		return err
+	}
+
+	// Insert migration version into history table
+	if len(m.Version) > 0 {
+		batch := &pgconn.Batch{}
+		if err := m.insertVersionSQL(primary, batch); err != nil {
+			return err
+		}
+		if _, err := primary.PgConn().ExecBatch(ctx, batch).ReadAll(); err != nil {
+			return errors.Errorf("failed to insert migration version: %w", err)
+		}
+	}
+
 	return nil
 }
 

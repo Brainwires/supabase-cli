@@ -364,7 +364,8 @@ func SetupLocalDatabase(ctx context.Context, version string, fsys afero.Fs, w io
 	if err := SetupDatabase(ctx, conn, utils.DbId, w, fsys); err != nil {
 		return err
 	}
-	return apply.MigrateAndSeed(ctx, version, conn, fsys)
+	// Local operation - no Spock needed
+	return apply.MigrateAndSeed(ctx, version, conn, fsys, nil)
 }
 
 func SetupDatabase(ctx context.Context, conn *pgx.Conn, host string, w io.Writer, fsys afero.Fs) error {

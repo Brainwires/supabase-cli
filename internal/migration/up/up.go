@@ -3,6 +3,7 @@ package up
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/go-errors/errors"
@@ -20,6 +21,22 @@ func Run(ctx context.Context, includeAll bool, config pgconn.Config, fsys afero.
 		return err
 	}
 	defer conn.Close(context.Background())
+
+	// Connect to remote if Spock is enabled
+	var remoteConn *pgx.Conn
+	if utils.Config.Db.Spock.Enabled {
+		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
+		if remoteDSN == "" {
+			return errors.New("Spock enabled but remote_dsn not configured")
+		}
+		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
+		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		if err != nil {
+			return errors.Errorf("failed to connect to remote Spock node: %w", err)
+		}
+		defer remoteConn.Close(context.Background())
+	}
+
 	pending, err := GetPendingMigrations(ctx, includeAll, conn, fsys)
 	if err != nil {
 		return err
@@ -27,7 +44,24 @@ func Run(ctx context.Context, includeAll bool, config pgconn.Config, fsys afero.
 	if err := vault.UpsertVaultSecrets(ctx, utils.Config.Db.Vault, conn); err != nil {
 		return err
 	}
-	return migration.ApplyMigrations(ctx, pending, conn, afero.NewIOFS(fsys))
+
+	// Build SpockOptions if Spock is enabled
+	spockOpts := migration.SpockOptions{}
+	if utils.Config.Db.Spock.Enabled {
+		spockOpts = migration.SpockOptions{
+			Enabled:         true,
+			RemoteConn:      remoteConn,
+			ReplicationSets: utils.Config.Db.Spock.ReplicationSets,
+			DefaultRepSet:   utils.Config.Db.Spock.DefaultRepSet,
+			AutoAddTables:   utils.Config.Db.Spock.AutoAddTables,
+			NodeOffset:      utils.Config.Db.Spock.NodeOffset,
+			MaxWaitAttempts: utils.Config.Db.Spock.MaxWaitAttempts,
+			BaseWaitDelayMs: utils.Config.Db.Spock.BaseWaitDelayMs,
+			Verbose:         utils.Config.Db.Spock.Verbose,
+		}
+	}
+
+	return migration.ApplyMigrations(ctx, pending, conn, afero.NewIOFS(fsys), spockOpts)
 }
 
 func GetPendingMigrations(ctx context.Context, includeAll bool, conn *pgx.Conn, fsys afero.Fs) ([]string, error) {

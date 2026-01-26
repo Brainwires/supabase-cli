@@ -9,12 +9,26 @@ import (
 
 	"github.com/go-errors/errors"
 	"github.com/jackc/pgx/v4"
+	"github.com/supabase/cli/pkg/spock"
 )
 
 var (
 	ErrMissingRemote = errors.New("Found local migration files to be inserted before the last migration on remote database.")
 	ErrMissingLocal  = errors.New("Remote migration versions not found in local migrations directory.")
 )
+
+// SpockOptions configures Spock replication for migrations
+type SpockOptions struct {
+	Enabled         bool
+	RemoteConn      *pgx.Conn
+	ReplicationSets []string
+	DefaultRepSet   string
+	AutoAddTables   bool
+	NodeOffset      int  // 1 for primary (odd IDs), 2 for standby (even IDs)
+	MaxWaitAttempts int  // Max attempts when waiting for remote
+	BaseWaitDelayMs int  // Base delay in ms for backoff
+	Verbose         bool // Enable verbose logging
+}
 
 // Find unapplied local migrations older than the latest migration on
 // remote, and remote migrations that are missing from local.
@@ -53,12 +67,19 @@ func FindPendingMigrations(localMigrations, remoteMigrations []string) ([]string
 	return pending, nil
 }
 
-func ApplyMigrations(ctx context.Context, pending []string, conn *pgx.Conn, fsys fs.FS) error {
+func ApplyMigrations(ctx context.Context, pending []string, conn *pgx.Conn, fsys fs.FS, opts ...SpockOptions) error {
 	if len(pending) > 0 {
 		if err := CreateMigrationTable(ctx, conn); err != nil {
 			return err
 		}
 	}
+
+	// Check if Spock mode is enabled
+	var spockOpts *SpockOptions
+	if len(opts) > 0 && opts[0].Enabled {
+		spockOpts = &opts[0]
+	}
+
 	for _, path := range pending {
 		filename := filepath.Base(path)
 		fmt.Fprintf(os.Stderr, "Applying migration %s...\n", filename)
@@ -67,10 +88,30 @@ func ApplyMigrations(ctx context.Context, pending []string, conn *pgx.Conn, fsys
 		if _, err := conn.Exec(ctx, "RESET ALL"); err != nil {
 			return errors.Errorf("failed to reset connection state: %v", err)
 		}
-		if migration, err := NewMigrationFromFile(path, fsys); err != nil {
+
+		migration, err := NewMigrationFromFile(path, fsys)
+		if err != nil {
 			return err
-		} else if err := migration.ExecBatch(ctx, conn); err != nil {
-			return err
+		}
+
+		if spockOpts != nil {
+			spockCfg := spock.Config{
+				Enabled:         true,
+				ReplicationSets: spockOpts.ReplicationSets,
+				DefaultRepSet:   spockOpts.DefaultRepSet,
+				AutoAddTables:   spockOpts.AutoAddTables,
+				NodeOffset:      spockOpts.NodeOffset,
+				MaxWaitAttempts: spockOpts.MaxWaitAttempts,
+				BaseWaitDelayMs: spockOpts.BaseWaitDelayMs,
+				Verbose:         spockOpts.Verbose,
+			}
+			if err := migration.ExecBatchWithSpock(ctx, conn, spockOpts.RemoteConn, spockCfg); err != nil {
+				return err
+			}
+		} else {
+			if err := migration.ExecBatch(ctx, conn); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

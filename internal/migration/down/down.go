@@ -24,6 +24,22 @@ func Run(ctx context.Context, last uint, config pgconn.Config, fsys afero.Fs, op
 		return err
 	}
 	defer conn.Close(context.Background())
+
+	// Connect to Spock remote if enabled
+	var remoteConn *pgx.Conn
+	if utils.Config.Db.Spock.Enabled {
+		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
+		if remoteDSN == "" {
+			return errors.New("Spock enabled but remote_dsn not configured")
+		}
+		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
+		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		if err != nil {
+			return errors.Errorf("failed to connect to remote Spock node: %w", err)
+		}
+		defer remoteConn.Close(context.Background())
+	}
+
 	remoteMigrations, err := migration.ListRemoteMigrations(ctx, conn)
 	if err != nil {
 		return err
@@ -41,17 +57,17 @@ func Run(ctx context.Context, last uint, config pgconn.Config, fsys afero.Fs, op
 	}
 	version := remoteMigrations[total-last-1]
 	fmt.Fprintln(os.Stderr, "Resetting database to version:", version)
-	return ResetAll(ctx, version, conn, fsys)
+	return ResetAll(ctx, version, conn, fsys, remoteConn)
 }
 
-func ResetAll(ctx context.Context, version string, conn *pgx.Conn, fsys afero.Fs) error {
+func ResetAll(ctx context.Context, version string, conn *pgx.Conn, fsys afero.Fs, remoteConn *pgx.Conn) error {
 	if err := migration.DropUserSchemas(ctx, conn); err != nil {
 		return err
 	}
 	if err := vault.UpsertVaultSecrets(ctx, utils.Config.Db.Vault, conn); err != nil {
 		return err
 	}
-	return apply.MigrateAndSeed(ctx, version, conn, fsys)
+	return apply.MigrateAndSeed(ctx, version, conn, fsys, remoteConn)
 }
 
 func confirmResetAll(pending []string) string {

@@ -93,7 +93,7 @@ func TestResetRemote(t *testing.T) {
 			Query(migration.INSERT_MIGRATION_VERSION, "0", "schema", nil).
 			Reply("INSERT 0 1")
 		// Run test
-		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys)
+		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys, nil)
 		// Check error
 		assert.NoError(t, err)
 	})
@@ -118,7 +118,7 @@ func TestResetRemote(t *testing.T) {
 			Reply("INSERT 0 1")
 		utils.Config.Db.Seed.Enabled = false
 		// Run test
-		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys)
+		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys, nil)
 		// No error should be raised since we're skipping the seed
 		assert.NoError(t, err)
 	})
@@ -132,7 +132,7 @@ func TestResetRemote(t *testing.T) {
 		conn.Query(migration.DropObjects).
 			ReplyError(pgerrcode.InsufficientPrivilege, "permission denied for relation supabase_migrations")
 		// Run test
-		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys)
+		err := ResetAll(context.Background(), "", conn.MockClient(t), fsys, nil)
 		// Check error
 		assert.ErrorContains(t, err, "ERROR: permission denied for relation supabase_migrations (SQLSTATE 42501)")
 	})

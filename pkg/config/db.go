@@ -89,6 +89,7 @@ type (
 		Settings            settings            `toml:"settings"`
 		NetworkRestrictions networkRestrictions `toml:"network_restrictions"`
 		Vault               map[string]Secret   `toml:"vault"`
+		Spock               spockConfig         `toml:"spock"`
 	}
 
 	migrations struct {
@@ -112,6 +113,18 @@ type (
 		TenantId         string   `toml:"-"`
 		EncryptionKey    string   `toml:"-"`
 		SecretKeyBase    string   `toml:"-"`
+	}
+
+	spockConfig struct {
+		Enabled         bool     `toml:"enabled"`
+		RemoteDSN       Secret   `toml:"remote_dsn"`
+		ReplicationSets []string `toml:"replication_sets"`
+		DefaultRepSet   string   `toml:"default_repset"`
+		AutoAddTables   bool     `toml:"auto_add_tables"`
+		NodeOffset      int      `toml:"node_offset"`       // 1 for primary (odd IDs), 2 for standby (even IDs)
+		MaxWaitAttempts int      `toml:"max_wait_attempts"` // Max attempts when waiting for remote (default: 30)
+		BaseWaitDelayMs int      `toml:"base_wait_delay_ms"` // Base delay in ms for backoff (default: 100)
+		Verbose         bool     `toml:"verbose"`           // Enable verbose logging
 	}
 )
 
