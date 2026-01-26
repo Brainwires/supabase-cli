@@ -17,7 +17,7 @@ import (
 	"github.com/supabase/cli/pkg/vault"
 )
 
-func Run(ctx context.Context, dryRun, ignoreVersionMismatch bool, includeRoles, includeSeed bool, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
+func Run(ctx context.Context, dryRun, ignoreVersionMismatch bool, includeRoles, includeSeed bool, spockRemoteDSN string, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
 	if dryRun {
 		fmt.Fprintln(os.Stderr, "DRY RUN: migrations will *not* be pushed to the database.")
 	}
@@ -30,12 +30,11 @@ func Run(ctx context.Context, dryRun, ignoreVersionMismatch bool, includeRoles, 
 	// Connect to remote if Spock is enabled
 	var remoteConn *pgx.Conn
 	if utils.Config.Db.Spock.Enabled {
-		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
-		if remoteDSN == "" {
-			return errors.New("Spock enabled but remote_dsn not configured")
+		if spockRemoteDSN == "" {
+			return errors.New("Spock enabled but --spock-remote-dsn not provided")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
-		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)
 		if err != nil {
 			return errors.Errorf("failed to connect to remote Spock node: %w", err)
 		}

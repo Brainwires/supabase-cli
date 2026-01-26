@@ -137,16 +137,23 @@ var (
 		},
 	}
 
-	dryRun       bool
-	includeAll   bool
-	includeRoles bool
-	includeSeed  bool
+	dryRun          bool
+	includeAll      bool
+	includeRoles    bool
+	includeSeed     bool
+	pushSpockRemote string
 
 	dbPushCmd = &cobra.Command{
 		Use:   "push",
 		Short: "Push new migrations to the remote database",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if utils.Config.Db.Spock.Enabled && pushSpockRemote == "" {
+				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return push.Run(cmd.Context(), dryRun, includeAll, includeRoles, includeSeed, flags.DbConfig, afero.NewOsFs())
+			return push.Run(cmd.Context(), dryRun, includeAll, includeRoles, includeSeed, pushSpockRemote, flags.DbConfig, afero.NewOsFs())
 		},
 	}
 
@@ -190,17 +197,24 @@ var (
 		},
 	}
 
-	noSeed      bool
-	lastVersion uint
+	noSeed           bool
+	lastVersion      uint
+	resetSpockRemote string
 
 	dbResetCmd = &cobra.Command{
 		Use:   "reset",
 		Short: "Resets the local database to current migrations",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if utils.Config.Db.Spock.Enabled && resetSpockRemote == "" {
+				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if noSeed {
 				utils.Config.Db.Seed.Enabled = false
 			}
-			return reset.Run(cmd.Context(), migrationVersion, lastVersion, flags.DbConfig, afero.NewOsFs())
+			return reset.Run(cmd.Context(), migrationVersion, lastVersion, resetSpockRemote, flags.DbConfig, afero.NewOsFs())
 		},
 	}
 
@@ -289,6 +303,7 @@ func init() {
 	pushFlags.BoolVar(&includeRoles, "include-roles", false, "Include custom roles from "+utils.CustomRolesPath+".")
 	pushFlags.BoolVar(&includeSeed, "include-seed", false, "Include seed data from your config.")
 	pushFlags.BoolVar(&dryRun, "dry-run", false, "Print the migrations that would be applied, but don't actually apply them.")
+	pushFlags.StringVar(&pushSpockRemote, "spock-remote-dsn", "", "Connection string for remote Spock node (required when Spock is enabled).")
 	pushFlags.String("db-url", "", "Pushes to the database specified by the connection string (must be percent-encoded).")
 	pushFlags.Bool("linked", true, "Pushes to the linked project.")
 	pushFlags.Bool("local", false, "Pushes to the local database.")
@@ -323,6 +338,7 @@ func init() {
 	resetFlags.Bool("linked", false, "Resets the linked project with local migrations.")
 	resetFlags.Bool("local", true, "Resets the local database with local migrations.")
 	resetFlags.BoolVar(&noSeed, "no-seed", false, "Skip running the seed script after reset.")
+	resetFlags.StringVar(&resetSpockRemote, "spock-remote-dsn", "", "Connection string for remote Spock node (required when Spock is enabled).")
 	dbResetCmd.MarkFlagsMutuallyExclusive("db-url", "linked", "local")
 	resetFlags.StringVar(&migrationVersion, "version", "", "Reset up to the specified version.")
 	resetFlags.UintVar(&lastVersion, "last", 0, "Reset up to the last n migration versions.")

@@ -31,7 +31,7 @@ import (
 	"github.com/supabase/cli/pkg/migration"
 )
 
-func Run(ctx context.Context, version string, last uint, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
+func Run(ctx context.Context, version string, last uint, spockRemoteDSN string, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
 	if len(version) > 0 {
 		if _, err := strconv.Atoi(version); err != nil {
 			return errors.New(repair.ErrInvalidVersion)
@@ -52,7 +52,7 @@ func Run(ctx context.Context, version string, last uint, config pgconn.Config, f
 		}
 	}
 	if !utils.IsLocalDatabase(config) {
-		return resetRemote(ctx, version, config, fsys, options...)
+		return resetRemote(ctx, version, spockRemoteDSN, config, fsys, options...)
 	}
 	// Config file is loaded before parsing --linked or --local flags
 	if err := utils.AssertSupabaseDbIsRunning(); err != nil {
@@ -239,7 +239,7 @@ func listServicesToRestart() []string {
 	return []string{utils.StorageId, utils.GotrueId, utils.RealtimeId, utils.PoolerId}
 }
 
-func resetRemote(ctx context.Context, version string, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
+func resetRemote(ctx context.Context, version string, spockRemoteDSN string, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
 	msg := "Do you want to reset the remote database?"
 	if shouldReset, err := utils.NewConsole().PromptYesNo(ctx, msg, false); err != nil {
 		return err
@@ -256,12 +256,11 @@ func resetRemote(ctx context.Context, version string, config pgconn.Config, fsys
 	// Connect to Spock remote if enabled
 	var remoteConn *pgx.Conn
 	if utils.Config.Db.Spock.Enabled {
-		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
-		if remoteDSN == "" {
-			return errors.New("Spock enabled but remote_dsn not configured")
+		if spockRemoteDSN == "" {
+			return errors.New("Spock enabled but --spock-remote-dsn not provided")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
-		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)
 		if err != nil {
 			return errors.Errorf("failed to connect to remote Spock node: %w", err)
 		}

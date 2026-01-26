@@ -19,6 +19,8 @@ import (
 )
 
 var (
+	spockRemoteDSN string
+
 	migrationCmd = &cobra.Command{
 		GroupID: groupLocalDev,
 		Use:     "migration",
@@ -77,22 +79,35 @@ var (
 	migrationUpCmd = &cobra.Command{
 		Use:   "up",
 		Short: "Apply pending migrations to local database",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if utils.Config.Db.Spock.Enabled && spockRemoteDSN == "" {
+				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return up.Run(cmd.Context(), includeAll, flags.DbConfig, afero.NewOsFs())
+			return up.Run(cmd.Context(), includeAll, spockRemoteDSN, flags.DbConfig, afero.NewOsFs())
 		},
 		PostRun: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Local database is up to date.")
 		},
 	}
 
-	nLastVersion uint
+	nLastVersion       uint
+	downSpockRemoteDSN string
 
 	migrationDownCmd = &cobra.Command{
 		Use:   "down",
 		Short: "Resets applied migrations up to the last n versions",
 		Args:  cobra.NoArgs,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if utils.Config.Db.Spock.Enabled && downSpockRemoteDSN == "" {
+				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return down.Run(cmd.Context(), nLastVersion, flags.DbConfig, afero.NewOsFs())
+			return down.Run(cmd.Context(), nLastVersion, downSpockRemoteDSN, flags.DbConfig, afero.NewOsFs())
 		},
 	}
 
@@ -142,6 +157,7 @@ func init() {
 	// Build up command
 	upFlags := migrationUpCmd.Flags()
 	upFlags.BoolVar(&includeAll, "include-all", false, "Include all migrations not found on remote history table.")
+	upFlags.StringVar(&spockRemoteDSN, "spock-remote-dsn", "", "Connection string for remote Spock node (required when Spock is enabled).")
 	upFlags.String("db-url", "", "Applies migrations to the database specified by the connection string (must be percent-encoded).")
 	upFlags.Bool("linked", false, "Applies pending migrations to the linked project.")
 	upFlags.Bool("local", true, "Applies pending migrations to the local database.")
@@ -149,6 +165,7 @@ func init() {
 	migrationCmd.AddCommand(migrationUpCmd)
 	downFlags := migrationDownCmd.Flags()
 	downFlags.UintVar(&nLastVersion, "last", 1, "Reset up to the last n migration versions.")
+	downFlags.StringVar(&downSpockRemoteDSN, "spock-remote-dsn", "", "Connection string for remote Spock node (required when Spock is enabled).")
 	downFlags.String("db-url", "", "Resets applied migrations on the database specified by the connection string (must be percent-encoded).")
 	downFlags.Bool("linked", false, "Resets applied migrations on the linked project.")
 	downFlags.Bool("local", true, "Resets applied migrations on the local database.")

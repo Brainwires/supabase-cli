@@ -121,7 +121,8 @@ func Run(ctx context.Context, starter StarterTemplate, fsys afero.Fs, options ..
 	}
 	policy.Reset()
 	if err := backoff.RetryNotify(func() error {
-		return push.Run(ctx, false, false, true, true, config, fsys)
+		// Bootstrap doesn't support Spock replication - pass empty string for spockRemoteDSN
+		return push.Run(ctx, false, false, true, true, "", config, fsys)
 	}, policy, utils.NewErrorCallback()); err != nil {
 		return err
 	}

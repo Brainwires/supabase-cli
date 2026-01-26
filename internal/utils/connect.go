@@ -29,6 +29,10 @@ func ToPostgresURL(config pgconn.Config) string {
 	for k, v := range config.RuntimeParams {
 		queryParams += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
 	}
+	// Preserve sslmode setting - if TLSConfig is nil, use sslmode=disable
+	if config.TLSConfig == nil {
+		queryParams += "&sslmode=disable"
+	}
 	// IPv6 address must be wrapped in square brackets
 	host := config.Host
 	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {

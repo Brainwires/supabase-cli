@@ -15,7 +15,7 @@ import (
 	"github.com/supabase/cli/pkg/vault"
 )
 
-func Run(ctx context.Context, includeAll bool, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
+func Run(ctx context.Context, includeAll bool, spockRemoteDSN string, config pgconn.Config, fsys afero.Fs, options ...func(*pgx.ConnConfig)) error {
 	conn, err := utils.ConnectByConfig(ctx, config, options...)
 	if err != nil {
 		return err
@@ -25,12 +25,11 @@ func Run(ctx context.Context, includeAll bool, config pgconn.Config, fsys afero.
 	// Connect to remote if Spock is enabled
 	var remoteConn *pgx.Conn
 	if utils.Config.Db.Spock.Enabled {
-		remoteDSN := utils.Config.Db.Spock.RemoteDSN.Value
-		if remoteDSN == "" {
-			return errors.New("Spock enabled but remote_dsn not configured")
+		if spockRemoteDSN == "" {
+			return errors.New("Spock enabled but --spock-remote-dsn not provided")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
-		remoteConn, err = utils.ConnectByUrl(ctx, remoteDSN, options...)
+		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)
 		if err != nil {
 			return errors.Errorf("failed to connect to remote Spock node: %w", err)
 		}
