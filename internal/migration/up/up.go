@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/supabase/cli/internal/utils"
 	"github.com/supabase/cli/pkg/migration"
+	"github.com/supabase/cli/pkg/spock"
 	"github.com/supabase/cli/pkg/vault"
 )
 
@@ -22,11 +23,14 @@ func Run(ctx context.Context, includeAll bool, spockRemoteDSN string, config pgc
 	}
 	defer conn.Close(context.Background())
 
+	// Check if Spock is enabled on the database
+	spockEnabled, _ := spock.IsSpockEnabled(ctx, conn)
+
 	// Connect to remote if Spock is enabled
 	var remoteConn *pgx.Conn
-	if utils.Config.Db.Spock.Enabled {
+	if spockEnabled {
 		if spockRemoteDSN == "" {
-			return errors.New("Spock enabled but --spock-remote-dsn not provided")
+			return errors.New("Spock replication is enabled on this database. Use --spock-remote-dsn to specify the remote node")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
 		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)
@@ -44,20 +48,38 @@ func Run(ctx context.Context, includeAll bool, spockRemoteDSN string, config pgc
 		return err
 	}
 
-	// Build SpockOptions if Spock is enabled
+	// Build SpockOptions if Spock is enabled on database
 	spockOpts := migration.SpockOptions{}
-	if utils.Config.Db.Spock.Enabled {
+	if spockEnabled {
 		spockOpts = migration.SpockOptions{
 			Enabled:         true,
 			RemoteConn:      remoteConn,
-			ReplicationSets: utils.Config.Db.Spock.ReplicationSets,
-			DefaultRepSet:   utils.Config.Db.Spock.DefaultRepSet,
-			AutoAddTables:   utils.Config.Db.Spock.AutoAddTables,
-			NodeOffset:      utils.Config.Db.Spock.NodeOffset,
-			MaxWaitAttempts: utils.Config.Db.Spock.MaxWaitAttempts,
-			BaseWaitDelayMs: utils.Config.Db.Spock.BaseWaitDelayMs,
-			Verbose:         utils.Config.Db.Spock.Verbose,
+			ReplicationSets: []string{"default", "ddl_sql"},
+			DefaultRepSet:   "default",
+			AutoAddTables:   true,
+			NodeOffset:      1,
+			MaxWaitAttempts: 30,
+			BaseWaitDelayMs: 100,
+			Verbose:         false,
 		}
+		// Override with config.toml values if available
+		if len(utils.Config.Db.Spock.ReplicationSets) > 0 {
+			spockOpts.ReplicationSets = utils.Config.Db.Spock.ReplicationSets
+		}
+		if utils.Config.Db.Spock.DefaultRepSet != "" {
+			spockOpts.DefaultRepSet = utils.Config.Db.Spock.DefaultRepSet
+		}
+		if utils.Config.Db.Spock.NodeOffset > 0 {
+			spockOpts.NodeOffset = utils.Config.Db.Spock.NodeOffset
+		}
+		if utils.Config.Db.Spock.MaxWaitAttempts > 0 {
+			spockOpts.MaxWaitAttempts = utils.Config.Db.Spock.MaxWaitAttempts
+		}
+		if utils.Config.Db.Spock.BaseWaitDelayMs > 0 {
+			spockOpts.BaseWaitDelayMs = utils.Config.Db.Spock.BaseWaitDelayMs
+		}
+		spockOpts.AutoAddTables = utils.Config.Db.Spock.AutoAddTables
+		spockOpts.Verbose = utils.Config.Db.Spock.Verbose
 	}
 
 	return migration.ApplyMigrations(ctx, pending, conn, afero.NewIOFS(fsys), spockOpts)

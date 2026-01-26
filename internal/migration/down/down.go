@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/cli/internal/migration/apply"
 	"github.com/supabase/cli/internal/utils"
 	"github.com/supabase/cli/pkg/migration"
+	"github.com/supabase/cli/pkg/spock"
 	"github.com/supabase/cli/pkg/vault"
 )
 
@@ -25,11 +26,14 @@ func Run(ctx context.Context, last uint, spockRemoteDSN string, config pgconn.Co
 	}
 	defer conn.Close(context.Background())
 
+	// Check if Spock is enabled on the database
+	spockEnabled, _ := spock.IsSpockEnabled(ctx, conn)
+
 	// Connect to Spock remote if enabled
 	var remoteConn *pgx.Conn
-	if utils.Config.Db.Spock.Enabled {
+	if spockEnabled {
 		if spockRemoteDSN == "" {
-			return errors.New("Spock enabled but --spock-remote-dsn not provided")
+			return errors.New("Spock replication is enabled on this database. Use --spock-remote-dsn to specify the remote node")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
 		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)

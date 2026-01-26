@@ -79,12 +79,6 @@ var (
 	migrationUpCmd = &cobra.Command{
 		Use:   "up",
 		Short: "Apply pending migrations to local database",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if utils.Config.Db.Spock.Enabled && spockRemoteDSN == "" {
-				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
-			}
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return up.Run(cmd.Context(), includeAll, spockRemoteDSN, flags.DbConfig, afero.NewOsFs())
 		},
@@ -100,12 +94,6 @@ var (
 		Use:   "down",
 		Short: "Resets applied migrations up to the last n versions",
 		Args:  cobra.NoArgs,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if utils.Config.Db.Spock.Enabled && downSpockRemoteDSN == "" {
-				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
-			}
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return down.Run(cmd.Context(), nLastVersion, downSpockRemoteDSN, flags.DbConfig, afero.NewOsFs())
 		},

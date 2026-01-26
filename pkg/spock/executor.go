@@ -261,3 +261,22 @@ func truncateSQL(sql string, maxLen int) string {
 	}
 	return sql[:maxLen] + "..."
 }
+
+// IsSpockEnabled checks if Spock extension is installed and has an active node
+// This checks the actual database state, not config files
+func IsSpockEnabled(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	// Check if spock extension exists and local_node is configured
+	var nodeExists bool
+	err := conn.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_extension WHERE extname = 'spock'
+		) AND EXISTS (
+			SELECT 1 FROM spock.local_node
+		)
+	`).Scan(&nodeExists)
+	if err != nil {
+		// Table might not exist if spock not installed - that's fine, just means no spock
+		return false, nil
+	}
+	return nodeExists, nil
+}

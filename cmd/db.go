@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/cli/internal/db/branch/switch_"
 	"github.com/supabase/cli/internal/db/diff"
 	"github.com/supabase/cli/internal/db/dump"
+	"github.com/supabase/cli/internal/db/exec"
 	"github.com/supabase/cli/internal/db/lint"
 	"github.com/supabase/cli/internal/db/pull"
 	"github.com/supabase/cli/internal/db/push"
@@ -146,12 +147,6 @@ var (
 	dbPushCmd = &cobra.Command{
 		Use:   "push",
 		Short: "Push new migrations to the remote database",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if utils.Config.Db.Spock.Enabled && pushSpockRemote == "" {
-				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
-			}
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return push.Run(cmd.Context(), dryRun, includeAll, includeRoles, includeSeed, pushSpockRemote, flags.DbConfig, afero.NewOsFs())
 		},
@@ -204,12 +199,6 @@ var (
 	dbResetCmd = &cobra.Command{
 		Use:   "reset",
 		Short: "Resets the local database to current migrations",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if utils.Config.Db.Spock.Enabled && resetSpockRemote == "" {
-				return fmt.Errorf("--spock-remote-dsn is required when Spock replication is enabled in config.toml")
-			}
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if noSeed {
 				utils.Config.Db.Seed.Enabled = false
@@ -252,6 +241,40 @@ var (
 		Short:  "Tests local database with pgTAP",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return test.Run(cmd.Context(), args, flags.DbConfig, afero.NewOsFs())
+		},
+	}
+
+	execSQL          string
+	execFile         string
+	execSpockRemote  string
+
+	dbExecCmd = &cobra.Command{
+		Use:   "exec",
+		Short: "Execute SQL statements against the database",
+		Long: `Execute SQL statements against the database.
+
+SQL can be provided via:
+  --sql "SELECT * FROM users"     Inline SQL
+  --file schema.sql               Read from file
+  --file -                        Read from stdin (pipe)
+
+When connecting to a database with Spock replication enabled, DDL statements
+are automatically wrapped in spock.replicate_ddl() and replicated to the
+remote node specified by --spock-remote-dsn.`,
+		Example: `  # Execute inline SQL
+  supabase db exec --sql "CREATE TABLE users (id serial primary key)"
+
+  # Execute from file
+  supabase db exec --file migrations/schema.sql
+
+  # Pipe from stdin
+  cat schema.sql | supabase db exec --file -
+
+  # With Spock replication (required if database has Spock enabled)
+  supabase db exec --sql "CREATE TABLE users (id serial primary key)" \
+    --spock-remote-dsn "postgresql://postgres:pass@standby:5432/postgres"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return exec.Run(cmd.Context(), execSQL, execFile, execSpockRemote, flags.DbConfig, afero.NewOsFs())
 		},
 	}
 )
@@ -365,5 +388,16 @@ func init() {
 	testFlags.Bool("linked", false, "Runs pgTAP tests on the linked project.")
 	testFlags.Bool("local", true, "Runs pgTAP tests on the local database.")
 	dbTestCmd.MarkFlagsMutuallyExclusive("db-url", "linked", "local")
+	// Build exec command
+	execFlags := dbExecCmd.Flags()
+	execFlags.StringVar(&execSQL, "sql", "", "SQL statement(s) to execute.")
+	execFlags.StringVarP(&execFile, "file", "f", "", "Path to SQL file to execute (use - for stdin).")
+	execFlags.StringVar(&execSpockRemote, "spock-remote-dsn", "", "Connection string for remote Spock node (required when Spock is enabled).")
+	execFlags.String("db-url", "", "Executes on the database specified by the connection string (must be percent-encoded).")
+	execFlags.Bool("linked", false, "Executes on the linked project.")
+	execFlags.Bool("local", true, "Executes on the local database.")
+	dbExecCmd.MarkFlagsMutuallyExclusive("db-url", "linked", "local")
+	dbExecCmd.MarkFlagsMutuallyExclusive("sql", "file")
+	dbCmd.AddCommand(dbExecCmd)
 	rootCmd.AddCommand(dbCmd)
 }

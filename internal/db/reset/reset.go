@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/spf13/afero"
 	"github.com/supabase/cli/internal/db/start"
+	"github.com/supabase/cli/pkg/spock"
 	"github.com/supabase/cli/internal/gen/keys"
 	"github.com/supabase/cli/internal/migration/apply"
 	"github.com/supabase/cli/internal/migration/down"
@@ -253,11 +254,14 @@ func resetRemote(ctx context.Context, version string, spockRemoteDSN string, con
 	}
 	defer conn.Close(context.Background())
 
+	// Check if Spock is enabled on the database
+	spockEnabled, _ := spock.IsSpockEnabled(ctx, conn)
+
 	// Connect to Spock remote if enabled
 	var remoteConn *pgx.Conn
-	if utils.Config.Db.Spock.Enabled {
+	if spockEnabled {
 		if spockRemoteDSN == "" {
-			return errors.New("Spock enabled but --spock-remote-dsn not provided")
+			return errors.New("Spock replication is enabled on this database. Use --spock-remote-dsn to specify the remote node")
 		}
 		fmt.Fprintln(os.Stderr, "Spock mode enabled - connecting to remote node...")
 		remoteConn, err = utils.ConnectByUrl(ctx, spockRemoteDSN, options...)
