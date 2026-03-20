@@ -80,7 +80,12 @@ var (
 		Use:   "up",
 		Short: "Apply pending migrations to local database",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return up.Run(cmd.Context(), includeAll, spockRemoteDSN, flags.DbConfig, afero.NewOsFs())
+			// Use config's Spock RemoteDSN as fallback if flag not provided
+			remoteDSN := spockRemoteDSN
+			if remoteDSN == "" && utils.Config.Db.Spock.Enabled {
+				remoteDSN = utils.Config.Db.Spock.RemoteDSN.Value
+			}
+			return up.Run(cmd.Context(), includeAll, remoteDSN, flags.DbConfig, afero.NewOsFs())
 		},
 		PostRun: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Local database is up to date.")
@@ -95,7 +100,12 @@ var (
 		Short: "Resets applied migrations up to the last n versions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return down.Run(cmd.Context(), nLastVersion, downSpockRemoteDSN, flags.DbConfig, afero.NewOsFs())
+			// Use config's Spock RemoteDSN as fallback if flag not provided
+			remoteDSN := downSpockRemoteDSN
+			if remoteDSN == "" && utils.Config.Db.Spock.Enabled {
+				remoteDSN = utils.Config.Db.Spock.RemoteDSN.Value
+			}
+			return down.Run(cmd.Context(), nLastVersion, remoteDSN, flags.DbConfig, afero.NewOsFs())
 		},
 	}
 

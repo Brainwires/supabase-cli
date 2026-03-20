@@ -2,11 +2,13 @@ package spock
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"time"
 
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -229,10 +231,16 @@ func (e *Executor) addTableToReplicationSets(ctx context.Context, tableInfo *Tab
 	e.logger.Printf("[spock] Adding table %s.%s to replication set '%s'",
 		tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet)
 
-	// Add to primary replication set
+	// Add to primary replication set (skip if already registered)
 	if _, err := e.primaryConn.Exec(ctx, addTableSQL); err != nil {
-		return fmt.Errorf("failed to add table %s.%s to primary repset '%s': %w\nSQL: %s",
-			tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet, err, addTableSQL)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			e.logger.Printf("[spock] Table %s.%s already in primary repset '%s', skipping",
+				tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet)
+		} else {
+			return fmt.Errorf("failed to add table %s.%s to primary repset '%s': %w\nSQL: %s",
+				tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet, err, addTableSQL)
+		}
 	}
 
 	// Add to remote replication set if connected
@@ -243,8 +251,14 @@ func (e *Executor) addTableToReplicationSets(ctx context.Context, tableInfo *Tab
 		}
 
 		if _, err := e.remoteConn.Exec(ctx, addTableSQL); err != nil {
-			return fmt.Errorf("failed to add table %s.%s to remote repset '%s': %w\nSQL: %s",
-				tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet, err, addTableSQL)
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				e.logger.Printf("[spock] Table %s.%s already in remote repset '%s', skipping",
+					tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet)
+			} else {
+				return fmt.Errorf("failed to add table %s.%s to remote repset '%s': %w\nSQL: %s",
+					tableInfo.Schema, tableInfo.Name, e.config.DefaultRepSet, err, addTableSQL)
+			}
 		}
 
 		e.logger.Printf("[spock] Table %s.%s added to replication sets on both nodes",
