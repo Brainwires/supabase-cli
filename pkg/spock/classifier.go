@@ -138,3 +138,16 @@ func IsDDL(stmt string) bool {
 func IsDML(stmt string) bool {
 	return ClassifyStatement(stmt) == StatementDML
 }
+
+// isTransactionControl returns true if the statement is a transaction control statement
+// (BEGIN, COMMIT, ROLLBACK, END). These are skipped in Spock mode because each DDL
+// statement is executed individually, and transaction wrappers in migration files would
+// prevent DDL from being replicated to the remote before COMMIT.
+func isTransactionControl(stmt string) bool {
+	stripped := stripLeadingComments(stmt)
+	upper := strings.ToUpper(strings.TrimSpace(stripped))
+	return upper == "BEGIN" || strings.HasPrefix(upper, "BEGIN;") ||
+		upper == "COMMIT" || strings.HasPrefix(upper, "COMMIT;") ||
+		upper == "ROLLBACK" || strings.HasPrefix(upper, "ROLLBACK;") ||
+		upper == "END" || strings.HasPrefix(upper, "END;")
+}

@@ -91,6 +91,14 @@ func (e *Executor) TransformStatements(statements []string) ([]TransformedStatem
 // ExecuteWithReplication executes statements with Spock replication support
 func (e *Executor) ExecuteWithReplication(ctx context.Context, statements []TransformedStatement) error {
 	for i, stmt := range statements {
+		// Skip BEGIN/COMMIT/ROLLBACK/END — migration files often wrap DDL in a transaction,
+		// but Spock requires DDL to be committed before it replicates to the remote.
+		// Each statement is executed individually, so transaction control is unnecessary.
+		if isTransactionControl(stmt.Original) {
+			e.logger.Printf("[spock] Skipping transaction control statement %d: %s", i, truncateSQL(stmt.Original, 100))
+			continue
+		}
+
 		e.logger.Printf("[spock] Executing statement %d: %s", i, truncateSQL(stmt.Original, 100))
 
 		// Execute the (possibly wrapped) statement on primary
